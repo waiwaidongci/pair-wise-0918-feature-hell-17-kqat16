@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "outDir": "test-dist",
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["src/domain.ts", "src/domain.test.ts", "src/types.ts"]
+}
