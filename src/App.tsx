@@ -1,128 +1,94 @@
-import "./styles.css";
+import { StoreProvider, useStore, fmtTime } from "./store";
+import EquipmentBoard from "./components/EquipmentBoard";
+import ScheduleBoard from "./components/ScheduleBoard";
+import OrderQueue from "./components/OrderQueue";
+import NewOrderForm from "./components/NewOrderForm";
+import AuditPanel from "./components/AuditPanel";
 
-const project = {
-  "sourceNo": 5,
-  "id": "hxyfront-62010",
-  "port": 62010,
-  "title": "潜水气瓶充填记录",
-  "domain": "潜水气瓶充填",
-  "prompt": "我想做一个给潜水店使用的气瓶充填前端系统，工作人员可以记录气瓶编号、容积、检验有效期、残压、目标压力、氧含量、氦含量、充填方式和操作员。页面需要有待充填队列、混合气比例提示、气瓶检验过期提醒、充填完成签收和单个气瓶历史记录。",
-  "palette": [
-    "#075985",
-    "#0d9488",
-    "#f59e0b"
-  ],
-  "metrics": [
-    "待充填",
-    "过期提醒",
-    "平均氧含量",
-    "签收单"
-  ],
-  "filters": [
-    "空气",
-    "高氧",
-    "Trimix",
-    "待检验"
-  ],
-  "fields": [
-    "气瓶编号",
-    "容积",
-    "检验有效期",
-    "残压",
-    "目标压力",
-    "氧含量"
-  ],
-  "records": [
-    [
-      "TANK-204",
-      "12L铝瓶",
-      "残压55bar，目标200bar",
-      "空气充填"
-    ],
-    [
-      "TANK-219",
-      "11L钢瓶",
-      "EAN32",
-      "待客户签收"
-    ],
-    [
-      "TANK-231",
-      "双瓶组",
-      "检验期剩余12天",
-      "标记提醒"
-    ]
-  ]
-};
+function Metrics() {
+  const { state } = useStore();
+  const waiting = state.orders.filter((o) => o.status === "scheduled").length;
+  const expired = state.orders.filter(
+    (o) =>
+      o.inspectionExpiry < state.now &&
+      ["scheduled", "filling", "paused"].includes(o.status)
+  ).length;
+  const active = state.orders.filter((o) => o.status !== "cancelled");
+  const avgO2 =
+    active.length > 0
+      ? Math.round((active.reduce((s, o) => s + o.o2, 0) / active.length) * 10) / 10
+      : 0;
+  const signed = state.orders.filter((o) => o.signedBy).length;
+  const paused = state.orders.filter((o) => o.status === "paused").length;
+  const maint = state.maintenance.filter((m) => m.end === null).length;
 
-function App() {
+  const items = [
+    { label: "待充填工单", value: waiting },
+    { label: "检验过期提醒", value: expired },
+    { label: "维护锁 / 暂停", value: `${maint} 台 / ${paused} 单` },
+    { label: "平均氧含量", value: `${avgO2}%` },
+    { label: "已签收单", value: signed },
+  ];
+
+  return (
+    <section className="metrics">
+      {items.map((m) => (
+        <article key={m.label}>
+          <small>{m.label}</small>
+          <strong>{m.value}</strong>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function TimeControls() {
+  const { state, dispatch } = useStore();
+  const jump = (min: number) =>
+    dispatch({ type: "TICK", now: state.now + min * 60_000 });
+  return (
+    <div className="clock-bar">
+      <span className="clock">🕒 演示时钟 {fmtTime(state.now)}</span>
+      <button onClick={() => jump(10)}>快进 10 分钟</button>
+      <button onClick={() => jump(30)}>快进 30 分钟</button>
+      <button onClick={() => jump(60)}>快进 1 小时</button>
+      <span className="hint">时钟自动每 15 秒推进 1 分钟，用于观察自动开始、完成与维护流程</span>
+    </div>
+  );
+}
+
+function Workspace() {
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+        <p>hxyfront-62010 · 潜水气瓶充填 · 充填台维护锁工作流</p>
+        <h1>设备维护锁与自动改约排班</h1>
+        <span>
+          压缩机 / 充填泵进入维护时：未开始的工单自动改约到同设备最近可用时段且绝不重叠；
+          已开始的工单保留现场、记录暂停时长，并在维护结束后按暂停前进度恢复；
+          同一客户改约两次后沿用首次确认信息；设备状态、工单历史与刷新后的排班保持一致。
+        </span>
+        <TimeControls />
       </section>
 
-      <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[28, 6, 14, 91][index] ?? 10}</strong>
-          </article>
-        ))}
+      <Metrics />
+      <EquipmentBoard />
+      <ScheduleBoard />
+
+      <section className="workspace workspace-wide">
+        <OrderQueue />
+        <NewOrderForm />
       </section>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}分类</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>近期记录</p>
-            <h2>工作台摘要</h2>
-          </div>
-          <button>导出CSV</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <AuditPanel />
     </main>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <StoreProvider>
+      <Workspace />
+    </StoreProvider>
+  );
+}
